@@ -1,4 +1,4 @@
-# kairos-hetzner-images
+# kairos-cloud-images
 
 Kairos + Hadron + k3s disk images for machines that boot in **legacy BIOS**
 mode, set up for debugging a headless machine. Tested on:
@@ -70,7 +70,7 @@ the server boots legacy BIOS.
 
 ```sh
 hcloud-upload-image upload \
-  --image-url https://github.com/mudler-agent/kairos-hetzner-images/releases/download/<tag>/<name>.raw.xz \
+  --image-url https://github.com/mudler-agent/kairos-cloud-images/releases/download/<tag>/<name>.raw.xz \
   --compression xz --architecture x86 --location fsn1 \
   --description "kairos hadron k3s <tag>"
 hcloud server create --name kairos-1 --type cx23 --image <snapshot-id> --location fsn1
