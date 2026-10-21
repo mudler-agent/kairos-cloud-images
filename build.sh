@@ -9,10 +9,16 @@
 #   DISK=efi                                  UEFI disk (OVHcloud) instead of BIOS (Hetzner)
 #   BOOT_ACTIVE=true                          (efi only) ship COS_STATE with active.img, so the
 #                                             first boot skips the recovery boot + reset + reboot
+#   STATE_SLOTS=1 NO_RECOVERY=true            (boot_active only) one copy of the OS: smaller
+#                                             image, but no in-place upgrades and no recovery
 set -euo pipefail
 : "${KAIROS_DIR:?path to a kairos checkout}" "${AURORABOOT_DIR:?path to an AuroraBoot checkout}"
 : "${HADRON_TAG:=v0.6.1}" "${OUT:=$PWD/out}" "${CLOUD_CONFIG:=$PWD/cloud-config.yaml}"
 : "${BASE_IMAGE:=ghcr.io/kairos-io/hadron:$HADRON_TAG}" "${DISK:=bios}" "${BOOT_ACTIVE:=false}"
+: "${STATE_SLOTS:=}" "${NO_RECOVERY:=false}"
+extra=()
+[ -n "$STATE_SLOTS" ] && extra+=(--set "disk.state_slots=$STATE_SLOTS")
+[ "$NO_RECOVERY" = true ] && extra+=(--set disk.no_recovery=true)
 here=$PWD
 cd "$KAIROS_DIR"
 sha=$(git rev-parse --short HEAD)
@@ -34,7 +40,7 @@ docker run --rm --privileged -v /var/run/docker.sock:/var/run/docker.sock \
   --set container_image=docker://kairos-local/kairos-hadron-k3s:hetzner \
   --set disk.$DISK=true --set disk.boot_active=$BOOT_ACTIVE --set disk.size=20000 \
   --set disable_http_server=true --set disable_netboot=true \
-  --set state_dir=/output --cloud-config /cc.yaml
+  --set state_dir=/output "${extra[@]}" --cloud-config /cc.yaml
 docker run --rm -v "$OUT":/output --entrypoint chown kairos-local/auroraboot:main -R "$(id -u):$(id -g)" /output
 cd "$OUT"
 raw=$(ls -t ./*.raw | head -1)

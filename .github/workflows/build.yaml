@@ -19,6 +19,10 @@ on:
         description: "efi only: ship COS_STATE with active.img (no first-boot recovery/reset/reboot)"
         type: boolean
         default: true
+      single_copy:
+        description: "boot_active only: ship one copy of the OS (state_slots=1, no recovery) to stay under the 2 GiB asset limit"
+        type: boolean
+        default: false
       kairos_ref:
         description: "kairos-io/kairos ref"
         default: master
@@ -100,6 +104,8 @@ jobs:
           BASE_IMAGE: ${{ steps.base.outputs.image }}
           DISK: ${{ inputs.disk }}
           BOOT_ACTIVE: ${{ inputs.disk == 'efi' && inputs.boot_active }}
+          STATE_SLOTS: ${{ inputs.single_copy && '1' || '' }}
+          NO_RECOVERY: ${{ inputs.single_copy }}
           OUT: ${{ runner.temp }}/out
           CLOUD_CONFIG: ${{ runner.temp }}/cc.yaml
         run: ./build.sh
@@ -111,6 +117,7 @@ jobs:
           BASE: ${{ inputs.base }}
           DISK: ${{ inputs.disk }}
           BOOT_ACTIVE: ${{ inputs.disk == 'efi' && inputs.boot_active }}
+          SINGLE_COPY: ${{ inputs.single_copy }}
           HADRON_TAG: ${{ inputs.hadron_tag }}
           KAIROS_REF: ${{ inputs.kairos_ref }}
           AURORABOOT_REF: ${{ inputs.auroraboot_ref }}
@@ -120,6 +127,7 @@ jobs:
           asha=$(git -C "$GITHUB_WORKSPACE/src/AuroraBoot" rev-parse --short HEAD)
           case "$BASE" in ubuntu) os="ubuntu-24.04" ;; *) os="$BASE-$HADRON_TAG" ;; esac
           layout=$DISK; [ "$BOOT_ACTIVE" = true ] && layout=$DISK-bootactive
+          [ "$SINGLE_COPY" = true ] && layout=$layout-single
           tag="$os-kairos-$ksha-$layout-run$GITHUB_RUN_NUMBER"
           qcow=$(ls ./*.qcow2)
           {
