@@ -1,37 +1,23 @@
 name: Build image
 
-# Builds one disk image with build.sh and attaches it to a release, so the
-# multi-GB upload happens from the runner instead of a workstation.
+# Builds the Hadron BIOS disk image with build.sh and attaches it to a
+# release, so the multi-GB upload happens from the runner.
 on:
   workflow_dispatch:
     inputs:
-      base:
-        description: "OS base"
-        type: choice
-        options: [hadron, hadron-fw, ubuntu]
-        default: hadron-fw
-      disk:
-        description: "efi (OVHcloud, UEFI) or bios (Hetzner Cloud)"
-        type: choice
-        options: [efi, bios]
-        default: efi
-      boot_active:
-        description: "efi only: ship COS_STATE with active.img (no first-boot recovery/reset/reboot)"
-        type: boolean
-        default: true
-      single_copy:
-        description: "boot_active only: ship one copy of the OS (state_slots=1, no recovery) to stay under the 2 GiB asset limit"
+      firmware:
+        description: "Add the server firmware from hadron-firmware/Dockerfile"
         type: boolean
         default: false
+      hadron_tag:
+        description: "Hadron tag"
+        default: v0.6.1
       kairos_ref:
         description: "kairos-io/kairos ref"
         default: master
       auroraboot_ref:
         description: "kairos-io/AuroraBoot ref"
         default: main
-      hadron_tag:
-        description: "Hadron tag (hadron and hadron-fw only)"
-        default: v0.6.1
 
 permissions:
   contents: write
@@ -70,30 +56,14 @@ jobs:
       - name: Install qemu-img and xz
         run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-utils xz-utils
 
-      - name: Pick the base image and cloud-config
-        id: base
-        env:
-          BASE: ${{ inputs.base }}
-          HADRON_TAG: ${{ inputs.hadron_tag }}
-        run: |
-          case "$BASE" in
-            hadron)    base="ghcr.io/kairos-io/hadron:$HADRON_TAG"; cc=cloud-config.yaml ;;
-            hadron-fw) docker build --build-arg HADRON_TAG="$HADRON_TAG" -t "kairos-local/hadron-fw:$HADRON_TAG" hadron-firmware/
-                       base="kairos-local/hadron-fw:$HADRON_TAG"; cc=cloud-config.yaml ;;
-            ubuntu)    base="ubuntu:24.04"; cc=cloud-config-ubuntu.yaml ;;
-          esac
-          echo "image=$base" >> "$GITHUB_OUTPUT"
-          echo "cloud_config=$cc" >> "$GITHUB_OUTPUT"
-
       - name: Put the console password hash in the cloud-config
         env:
           CONSOLE_PASSWD_HASH: ${{ secrets.CONSOLE_PASSWD_HASH }}
-          CC: ${{ steps.base.outputs.cloud_config }}
         run: |
           if [ -z "$CONSOLE_PASSWD_HASH" ]; then
             echo "::error::secret CONSOLE_PASSWD_HASH is not set (openssl passwd -6)"; exit 1
           fi
-          awk -v h="$CONSOLE_PASSWD_HASH" '/^    passwd: /{print "    passwd: \"" h "\""; next} {print}' "$CC" > "$RUNNER_TEMP/cc.yaml"
+          awk -v h="$CONSOLE_PASSWD_HASH" '/^    passwd: /{print "    passwd: \"" h "\""; next} {print}' cloud-config.yaml > "$RUNNER_TEMP/cc.yaml"
           grep -cF -- "passwd: \"$CONSOLE_PASSWD_HASH\"" "$RUNNER_TEMP/cc.yaml"
 
       - name: Build
@@ -101,11 +71,7 @@ jobs:
           KAIROS_DIR: ${{ github.workspace }}/src/kairos
           AURORABOOT_DIR: ${{ github.workspace }}/src/AuroraBoot
           HADRON_TAG: ${{ inputs.hadron_tag }}
-          BASE_IMAGE: ${{ steps.base.outputs.image }}
-          DISK: ${{ inputs.disk }}
-          BOOT_ACTIVE: ${{ inputs.disk == 'efi' && inputs.boot_active }}
-          STATE_SLOTS: ${{ inputs.single_copy && '1' || '' }}
-          NO_RECOVERY: ${{ inputs.single_copy }}
+          FIRMWARE: ${{ inputs.firmware }}
           OUT: ${{ runner.temp }}/out
           CLOUD_CONFIG: ${{ runner.temp }}/cc.yaml
         run: ./build.sh
@@ -114,10 +80,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OUT: ${{ runner.temp }}/out
-          BASE: ${{ inputs.base }}
-          DISK: ${{ inputs.disk }}
-          BOOT_ACTIVE: ${{ inputs.disk == 'efi' && inputs.boot_active }}
-          SINGLE_COPY: ${{ inputs.single_copy }}
+          FIRMWARE: ${{ inputs.firmware }}
           HADRON_TAG: ${{ inputs.hadron_tag }}
           KAIROS_REF: ${{ inputs.kairos_ref }}
           AURORABOOT_REF: ${{ inputs.auroraboot_ref }}
@@ -125,18 +88,15 @@ jobs:
           cd "$OUT"
           ksha=$(git -C "$GITHUB_WORKSPACE/src/kairos" rev-parse --short HEAD)
           asha=$(git -C "$GITHUB_WORKSPACE/src/AuroraBoot" rev-parse --short HEAD)
-          case "$BASE" in ubuntu) os="ubuntu-24.04" ;; *) os="$BASE-$HADRON_TAG" ;; esac
-          layout=$DISK; [ "$BOOT_ACTIVE" = true ] && layout=$DISK-bootactive
-          [ "$SINGLE_COPY" = true ] && layout=$layout-single
-          tag="$os-kairos-$ksha-$layout-run$GITHUB_RUN_NUMBER"
+          os="hadron-$HADRON_TAG"; [ "$FIRMWARE" = true ] && os="hadron-fw-$HADRON_TAG"
+          tag="$os-kairos-$ksha-bios-run$GITHUB_RUN_NUMBER"
           qcow=$(ls ./*.qcow2)
           {
             echo "Built by [run $GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
             echo
-            echo "- OS base: \`$os\`"
+            echo "- OS: \`$os\` (firmware: \`$FIRMWARE\`)"
             echo "- kairos \`$KAIROS_REF\` at \`$ksha\`, AuroraBoot \`$AURORABOOT_REF\` at \`$asha\`, k3s"
-            echo "- Disk: \`$DISK\`, 20 GB, boot_active=\`$BOOT_ACTIVE\`"
-            [ "$DISK" = efi ] && echo "- EFI bootloader path: \`\\EFI\\BOOT\\BOOTX64.EFI\`"
+            echo "- Disk: legacy BIOS, 20 GB"
             echo "- qcow2 URL: \`$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/${qcow#./}\`"
             echo
             echo '```'
@@ -144,6 +104,6 @@ jobs:
             echo '```'
           } > notes.md
           gh release create "$tag" -R "$GITHUB_REPOSITORY" --latest=false \
-            --title "$os + kairos $ksha + k3s ($layout, run $GITHUB_RUN_NUMBER)" \
+            --title "$os + kairos $ksha + k3s (BIOS, run $GITHUB_RUN_NUMBER)" \
             --notes-file notes.md ./*.qcow2 ./*.raw.xz SHA256SUMS
           echo "### $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
