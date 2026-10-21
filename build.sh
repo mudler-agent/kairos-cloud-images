@@ -38,7 +38,7 @@ docker run --rm --privileged -v /var/run/docker.sock:/var/run/docker.sock \
 docker run --rm -v "$OUT":/output --entrypoint chown kairos-local/auroraboot:main -R "$(id -u):$(id -g)" /output
 cd "$OUT"
 raw=$(ls -t ./*.raw | head -1)
-name=kairos-$(echo "${BASE_IMAGE##*/}" | tr ':' '-')-k3s-master-$sha-$DISK
+name=kairos-$(echo "${BASE_IMAGE##*/}" | tr ':' '-')-k3s-master-$sha-$DISK$([ "$BOOT_ACTIVE" = true ] && echo -bootactive)
 qemu-img convert -c -O qcow2 "$raw" "$name.qcow2"
 xz -T0 -6 -k -c "$raw" > "$name.raw.xz"
 sha256sum "$name.qcow2" "$name.raw.xz" > SHA256SUMS
