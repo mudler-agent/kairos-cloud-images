@@ -15,8 +15,7 @@ users:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfgyJA74pdQn5RY76lissD3S/X/trcOXalmki+baKuE mudler@kairos-devbox"
       - "github:mudler"
 
-k3s:
-  enabled: true
+# The k3s role (server or worker) is appended by build.sh from roles/.
 
 # Debug-friendly kernel cmdline, applied from the next boot on (every boot,
 # recovery included). Written straight into the OEM grubenv instead of using

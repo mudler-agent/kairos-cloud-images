@@ -4,11 +4,16 @@
 #   hadron:     ghcr.io/kairos-io/hadron:$HADRON_TAG
 #   auroraboot: main (or AURORABOOT_DIR's checkout), built from the tree
 # Usage: KAIROS_DIR=~/src/kairos AURORABOOT_DIR=~/src/AuroraBoot ./build.sh
+#   ROLE=worker     k3s worker instead of server (roles/worker.yaml)
 #   FIRMWARE=true   add the server firmware from hadron-firmware/Dockerfile
 set -euo pipefail
 : "${KAIROS_DIR:?path to a kairos checkout}" "${AURORABOOT_DIR:?path to an AuroraBoot checkout}"
-: "${HADRON_TAG:=v0.6.1}" "${FIRMWARE:=false}" "${OUT:=$PWD/out}" "${CLOUD_CONFIG:=$PWD/cloud-config.yaml}"
+: "${HADRON_TAG:=v0.6.1}" "${FIRMWARE:=false}" "${ROLE:=server}" "${OUT:=$PWD/out}" "${CLOUD_CONFIG:=$PWD/cloud-config.yaml}"
 here=$PWD
+case "$ROLE" in server|worker) ;; *) echo "ROLE must be server or worker" >&2; exit 1;; esac
+cc=$(mktemp)
+trap 'rm -f "$cc"' EXIT
+cat "$CLOUD_CONFIG" "roles/$ROLE.yaml" > "$cc"
 
 base=ghcr.io/kairos-io/hadron:$HADRON_TAG
 flavor=hadron-$HADRON_TAG
@@ -37,7 +42,7 @@ mkdir -p "$OUT"
 # resets and reboots into active. disk.size is in MB and must not exceed the
 # smallest disk you deploy to.
 docker run --rm --privileged -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$OUT":/output -v "$CLOUD_CONFIG":/cc.yaml kairos-local/auroraboot:main \
+  -v "$OUT":/output -v "$cc":/cc.yaml kairos-local/auroraboot:main \
   --set container_image=docker://kairos-local/kairos-hadron-k3s:hetzner \
   --set disk.bios=true --set disk.size=20000 \
   --set disable_http_server=true --set disable_netboot=true \
@@ -46,7 +51,7 @@ docker run --rm -v "$OUT":/output --entrypoint chown kairos-local/auroraboot:mai
 
 cd "$OUT"
 raw=$(ls -t ./*.raw | head -1)
-name=kairos-$flavor-k3s-master-$sha-bios
+name=kairos-$flavor-k3s-$ROLE-master-$sha-bios
 qemu-img convert -c -O qcow2 "$raw" "$name.qcow2"
 xz -T0 -6 -k -c "$raw" > "$name.raw.xz"
 sha256sum "$name.qcow2" "$name.raw.xz" > SHA256SUMS

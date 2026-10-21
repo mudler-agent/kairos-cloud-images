@@ -1,0 +1,12 @@
+
+# k3s worker. The server URL and the join token are not in the image: they
+# come from the OVH config drive (BYOI "config drive" user data) or from a
+# file in /oem, for example:
+#   #cloud-config
+#   k3s-agent:
+#     env:
+#       K3S_URL: https://<server-ip>:6443
+#       K3S_TOKEN: <server's /var/lib/rancher/k3s/server/node-token>
+# The flannel backend (wireguard-native) comes from the server.
+k3s-agent:
+  enabled: true

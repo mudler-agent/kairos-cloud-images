@@ -24,7 +24,7 @@ built any more.
 | kairos     | `master` (the release notes give the commit)              |
 | Hadron     | `v0.6.1` by default (`ghcr.io/kairos-io/hadron`)          |
 | AuroraBoot | `main`                                                    |
-| k3s        | enabled, single node                                      |
+| k3s        | server or worker, flannel on WireGuard (`wireguard-native`) |
 | Disk       | 20 GB, GPT with a BIOS boot partition                     |
 
 On first boot the machine boots into recovery, creates the state and
@@ -36,6 +36,7 @@ takes 2 to 4 minutes. The persistent partition then grows to fill the disk.
 Run the **Build image** workflow (Actions → Build image → Run workflow). It
 builds on a GitHub runner and publishes a release. Inputs:
 
+- `role`: `server` or `worker`. See [Add workers](#add-workers).
 - `firmware`: add the server firmware from `hadron-firmware/Dockerfile`. See
   [Hadron firmware](#hadron-firmware).
 - `hadron_tag`, `kairos_ref`, `auroraboot_ref`: the versions to build.
@@ -65,6 +66,39 @@ Put your own password hash in `cloud-config.yaml` first.
 To check whether a server boots BIOS or UEFI, install one of OVH's own
 templates and run `ls /sys/firmware/efi`. If the directory does not exist,
 the server boots legacy BIOS.
+
+## Add workers
+
+The server image runs k3s with `--flannel-backend=wireguard-native`. Flannel
+puts the pod traffic between nodes in WireGuard tunnels (UDP port 51820), so
+that traffic is encrypted also when it goes over the public network. The
+agent-to-server traffic is TLS already.
+
+The worker image has no server URL and no join token. A release asset is
+public, so a token in the image gives anyone a way to join the cluster. Give
+the URL and the token to each worker at install time:
+
+1. On the server, read the token: `sudo cat /var/lib/rancher/k3s/server/node-token`.
+2. Install the `k3s-worker` qcow2 with BYOI. Turn on the config drive and set
+   its user data to:
+
+   ```yaml
+   #cloud-config
+   k3s-agent:
+     env:
+       K3S_URL: https://<server-ip>:6443
+       K3S_TOKEN: <token>
+   ```
+
+   Kairos reads the `config-2` config drive on the first boot and writes the
+   user data to `/oem/95_userdata`.
+3. If the config drive is not available, SSH into the worker, put the same
+   YAML in `/oem/95_join.yaml`, and reboot.
+4. On the server, run `sudo k3s kubectl get nodes`.
+
+To turn on WireGuard on a server that runs `vxlan`, put
+`flannel-backend: wireguard-native` in `/etc/rancher/k3s/config.yaml` and
+restart k3s.
 
 ## Install on Hetzner Cloud
 
