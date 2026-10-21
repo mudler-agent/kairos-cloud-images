@@ -1,7 +1,7 @@
 
 # k3s worker. The server URL and the join token are not in the image: they
 # come from the OVH config drive (BYOI "config drive" user data) or from a
-# file in /oem, for example:
+# file in /oem plus a reboot, for example:
 #   #cloud-config
 #   k3s-agent:
 #     env:
