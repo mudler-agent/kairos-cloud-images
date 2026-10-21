@@ -1,14 +1,19 @@
 # kairos-hetzner-images
 
-Kairos + Hadron + k3s disk images, set up for debugging a headless machine.
-Each build comes in two variants:
+Kairos + k3s disk images, set up for debugging a headless machine. All
+variants share the same Kairos master build and baked cloud-config:
 
-- **BIOS** (release tag without a suffix): for Hetzner Cloud x86, which boots
-  legacy BIOS.
-- **UEFI** (release tag ending in `-efi`): for OVHcloud bare metal "Bring Your
-  Own Image" and other UEFI machines. The EFI bootloader path is
-  `\EFI\BOOT\BOOTX64.EFI` (shim, which loads `grubx64.efi`). Secure Boot is
-  not tested, so turn it off.
+| Release tag suffix | OS base | Boot | For |
+|---|---|---|---|
+| `hadron-…` (no suffix) | Hadron | BIOS | Hetzner Cloud x86 |
+| `hadron-…-efi` | Hadron | UEFI | OVHcloud BYOI, other UEFI machines |
+| `hadron-…-fw-…-efi` | Hadron + firmware ([`hadron-firmware/Dockerfile`](hadron-firmware/Dockerfile)) | UEFI | bare metal whose NICs need firmware |
+| `ubuntu-24.04-…-efi` | Ubuntu 24.04, full `linux-firmware` | UEFI | baseline: if this boots and Hadron does not, the cause is in Hadron |
+
+For a UEFI image the EFI bootloader path is `\EFI\BOOT\BOOTX64.EFI` (shim,
+which loads `grubx64.efi`). Turn Secure Boot off for the Hadron images.
+Ubuntu's shim is signed with the Microsoft key, but Secure Boot is not tested
+on any image.
 
 The images are in [Releases](../../releases). Each release has:
 
@@ -68,17 +73,43 @@ datasource. The keys baked into the image work without them.
   active system can be reached over SSH once it boots into recovery. Select
   recovery in the GRUB menu from the web console.
 
+## Hadron firmware
+
+Plain Hadron ships almost no firmware: its initramfs loads Intel, Broadcom and
+Mellanox NIC drivers with no firmware files. `hadron-firmware/Dockerfile` copies
+the server-relevant pieces of
+[kairos-io/hadron-firmware](https://github.com/kairos-io/hadron-firmware) onto
+the Hadron base: Intel `ice` (E810), QAT and GPU firmware, Broadcom and
+Realtek NIC firmware, AMD microcode, and the loose top-level files. Build it
+and use it as `BASE_IMAGE`, so the initramfs that kairos-init builds includes
+the firmware too.
+
 ## Rebuild
 
-`build.sh` and `cloud-config.yaml` (with the password hash removed) make the
-same image. You need docker, qemu-img and xz. For the UEFI variant, change
-`disk.bios=true` to `disk.efi=true`.
+`build.sh` makes every variant. `cloud-config.yaml` and
+`cloud-config-ubuntu.yaml` are the baked configs, with the password hash
+removed. You need docker, qemu-img and xz.
 
-## Known issue in kairos master (worked around here)
+```sh
+# Hetzner (Hadron, BIOS)
+./build.sh
+# OVHcloud, Hadron + firmware
+docker build -t kairos-local/hadron-fw:v0.6.1 hadron-firmware/
+BASE_IMAGE=kairos-local/hadron-fw:v0.6.1 DISK=efi ./build.sh
+# OVHcloud, Ubuntu baseline
+BASE_IMAGE=ubuntu:24.04 CLOUD_CONFIG=$PWD/cloud-config-ubuntu.yaml DISK=efi ./build.sh
+```
+
+## Known issues in kairos master (worked around here)
 
 With a top-level `grub_options` in the cloud-config, the first-boot hook
 `writeGrubenvToOem` (`agent/internal/agent/hooks/gruboptions.go`) unmounts
 `/oem` and does not mount it again. The provider bootstrap that runs right
 after it sees no `k3s:` block, so k3s stays down until the next reboot. This
 image writes `extra_cmdline` into `/oem/grubenv` with an `initramfs` stage and
-does not use `grub_options`.
+does not use `grub_options`. This is kairos-io/kairos#5168 (fix in #5169).
+
+`05-kairos-hardening.conf` from kairos-init lists `mlkem768x25519-sha256`,
+which needs OpenSSH 9.9 or later. Ubuntu 24.04 ships OpenSSH 9.6, so sshd
+rejects the file and never starts (kairos-io/kairos#5545). An `initramfs` stage
+keeps only the algorithms that the installed sshd supports (`ssh -Q`).

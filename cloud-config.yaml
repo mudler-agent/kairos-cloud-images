@@ -39,6 +39,23 @@ stages:
             KbdInteractiveAuthentication no
             AllowTcpForwarding yes
             ClientAliveCountMax 3
+    # kairos-init's 05-kairos-hardening.conf lists OpenSSH 10 algorithms
+    # (mlkem768x25519-sha256); OpenSSH 9.6 on Ubuntu 24.04 rejects the whole
+    # file and sshd never starts. Keep only what this sshd supports.
+    - name: "sshd: drop crypto algorithms this OpenSSH does not support"
+      commands:
+        - |
+          f=/etc/ssh/sshd_config.d/05-kairos-hardening.conf
+          [ -f "$f" ] && command -v ssh >/dev/null || exit 0
+          for pair in "KexAlgorithms kex" "Ciphers cipher" "MACs mac" "HostKeyAlgorithms key"; do
+            set -- $pair
+            cur=$(awk -v k="$1" '$1 == k {print $2}' "$f")
+            [ -n "$cur" ] || continue
+            ssh -Q "$2" > /tmp/.ssh-supported
+            new=$(echo "$cur" | tr ',' '\n' | grep -Fx -f /tmp/.ssh-supported | paste -sd, -)
+            [ -n "$new" ] && [ "$new" != "$cur" ] && sed -i "s|^$1 .*|$1 $new|" "$f"
+          done
+          rm -f /tmp/.ssh-supported
   network:
     # Hadron's agetty prints no issue file on tty1, so write the status
     # straight to the VGA console (what the Hetzner web console shows) and to
