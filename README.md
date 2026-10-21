@@ -1,7 +1,14 @@
 # kairos-hetzner-images
 
-Kairos + Hadron + k3s disk images for Hetzner Cloud (x86, legacy BIOS boot),
-set up for debugging a headless machine.
+Kairos + Hadron + k3s disk images, set up for debugging a headless machine.
+Each build comes in two variants:
+
+- **BIOS** (release tag without a suffix): for Hetzner Cloud x86, which boots
+  legacy BIOS.
+- **UEFI** (release tag ending in `-efi`): for OVHcloud bare metal "Bring Your
+  Own Image" and other UEFI machines. The EFI bootloader path is
+  `\EFI\BOOT\BOOTX64.EFI` (shim, which loads `grubx64.efi`). Secure Boot is
+  not tested, so turn it off.
 
 The images are in [Releases](../../releases). Each release has:
 
@@ -36,6 +43,13 @@ Hetzner user-data is optional. When it is given, the built-in `hetzner`
 datasource reads it on every boot (`/oem/95_userdata`), on top of the baked
 config.
 
+## Install on OVHcloud (UEFI)
+
+In the BYOI form, set the image URL to the `-efi` release's `.qcow2`, the
+image type to qcow2, and the EFI bootloader path to `\EFI\BOOT\BOOTX64.EFI`.
+SSH keys and userdata from the OVH config drive go through the `config-drive`
+datasource. The keys baked into the image work without them.
+
 ## Debugging a headless machine
 
 - **SSH:** `ssh kairos@<ip>`. The keys of github.com/mudler are baked in, and
@@ -57,7 +71,8 @@ config.
 ## Rebuild
 
 `build.sh` and `cloud-config.yaml` (with the password hash removed) make the
-same image. You need docker, qemu-img and xz.
+same image. You need docker, qemu-img and xz. For the UEFI variant, change
+`disk.bios=true` to `disk.efi=true`.
 
 ## Known issue in kairos master (worked around here)
 
