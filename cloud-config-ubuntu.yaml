@@ -27,7 +27,7 @@ k3s:
 stages:
   initramfs:
     - name: "Debug kernel cmdline (tty0 last so the Hetzner web console is /dev/console)"
-      if: '[ -f /oem/grubenv ] && ! $(command -v grub2-editenv || command -v grub-editenv) /oem/grubenv list | grep -q "^extra_cmdline=rd.immucore.debug"'
+      if: '! $(command -v grub2-editenv || command -v grub-editenv) /oem/grubenv list | grep -q "^extra_cmdline=rd.immucore.debug"'
       commands:
         - $(command -v grub2-editenv || command -v grub-editenv) /oem/grubenv set "extra_cmdline=rd.immucore.debug rd.kairos.debug console=ttyS0,115200 console=tty0"
     - name: "sshd: keys only, allow tunnels for debugging"

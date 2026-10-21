@@ -7,10 +7,12 @@
 #   BASE_IMAGE=kairos-local/hadron-fw:v0.6.1  Hadron + firmware (hadron-firmware/Dockerfile)
 #   BASE_IMAGE=ubuntu:24.04 CLOUD_CONFIG=$PWD/cloud-config-ubuntu.yaml
 #   DISK=efi                                  UEFI disk (OVHcloud) instead of BIOS (Hetzner)
+#   BOOT_ACTIVE=true                          (efi only) ship COS_STATE with active.img, so the
+#                                             first boot skips the recovery boot + reset + reboot
 set -euo pipefail
 : "${KAIROS_DIR:?path to a kairos checkout}" "${AURORABOOT_DIR:?path to an AuroraBoot checkout}"
 : "${HADRON_TAG:=v0.6.1}" "${OUT:=$PWD/out}" "${CLOUD_CONFIG:=$PWD/cloud-config.yaml}"
-: "${BASE_IMAGE:=ghcr.io/kairos-io/hadron:$HADRON_TAG}" "${DISK:=bios}"
+: "${BASE_IMAGE:=ghcr.io/kairos-io/hadron:$HADRON_TAG}" "${DISK:=bios}" "${BOOT_ACTIVE:=false}"
 here=$PWD
 cd "$KAIROS_DIR"
 sha=$(git rev-parse --short HEAD)
@@ -30,7 +32,7 @@ mkdir -p "$OUT"
 docker run --rm --privileged -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$OUT":/output -v "$CLOUD_CONFIG":/cc.yaml kairos-local/auroraboot:main \
   --set container_image=docker://kairos-local/kairos-hadron-k3s:hetzner \
-  --set disk.$DISK=true --set disk.size=20000 \
+  --set disk.$DISK=true --set disk.boot_active=$BOOT_ACTIVE --set disk.size=20000 \
   --set disable_http_server=true --set disable_netboot=true \
   --set state_dir=/output --cloud-config /cc.yaml
 docker run --rm -v "$OUT":/output --entrypoint chown kairos-local/auroraboot:main -R "$(id -u):$(id -g)" /output
