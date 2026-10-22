@@ -1,12 +1,16 @@
 # kairos-cloud-images
 
-Kairos + Hadron + k3s disk images for machines that boot in **legacy BIOS**
-mode, set up for debugging a headless machine. Tested on:
+Kairos + Hadron + k3s disk images, set up for debugging a headless machine.
+Each image boots in one firmware mode only: legacy BIOS (`-bios` in the tag)
+or UEFI (`-efi`). Use the one that matches the server:
 
-- Hetzner Cloud x86 servers
-- OVHcloud bare metal (Intel DH67BL / Xeon E3-1245 v2, "Bring Your Own Image").
-  The OVH install form asks for an EFI bootloader path, but this server boots
-  legacy BIOS, so EFI images never start on it.
+- Hetzner Cloud x86 servers: BIOS.
+- OVHcloud bare metal, Intel DH67BL / Xeon E3-1245 v2: BIOS. The OVH install
+  form asks for an EFI bootloader path, but this server boots legacy BIOS.
+- OVHcloud bare metal, Supermicro X10SRi-F / Xeon E5-1630 v4: UEFI (Secure
+  Boot off).
+
+An image in the wrong mode does not boot, and the server does not answer ping.
 
 The images are in [Releases](../../releases). Each release has:
 
@@ -14,8 +18,8 @@ The images are in [Releases](../../releases). Each release has:
 - `*.raw.xz`: for Hetzner (`hcloud-upload-image` takes a raw image).
 - `SHA256SUMS`
 
-Earlier releases with `-efi` in the tag are UEFI experiments. They are not
-built any more.
+Releases with `-efi` in the tag and no role (`-k3s-efi`, from before the
+worker role) are older UEFI experiments. Do not use them.
 
 ## What is inside
 
@@ -25,7 +29,7 @@ built any more.
 | Hadron     | `v0.6.1` by default (`ghcr.io/kairos-io/hadron`)          |
 | AuroraBoot | `main`                                                    |
 | k3s        | server or worker, flannel on WireGuard (`wireguard-native`) |
-| Disk       | 20 GB, GPT with a BIOS boot partition                     |
+| Disk       | 20 GB, GPT, BIOS boot partition or EFI system partition   |
 
 On first boot the machine boots into recovery, creates the state and
 persistent partitions, resets itself and reboots into the active system. This
@@ -37,6 +41,7 @@ Run the **Build image** workflow (Actions → Build image → Run workflow). It
 builds on a GitHub runner and publishes a release. Inputs:
 
 - `role`: `server` or `worker`. See [Add workers](#add-workers).
+- `boot`: `bios` or `efi`, the firmware boot mode of the target server.
 - `firmware`: add the server firmware from `hadron-firmware/Dockerfile`. See
   [Hadron firmware](#hadron-firmware).
 - `hadron_tag`, `kairos_ref`, `auroraboot_ref`: the versions to build.
@@ -60,12 +65,14 @@ Put your own password hash in `cloud-config.yaml` first.
    `qcow2`.
 3. The form also asks for an EFI bootloader path. Enter
    `\EFI\BOOT\BOOTX64.EFI`. A BIOS server does not use it.
+   Pick the `-bios` or `-efi` image to match the server (see below).
 4. Start the install. The server answers ping during OVH's own install step.
    SSH opens only after our image has booted.
 
 To check whether a server boots BIOS or UEFI, install one of OVH's own
 templates and run `ls /sys/firmware/efi`. If the directory does not exist,
-the server boots legacy BIOS.
+the server boots legacy BIOS; build with `boot: bios`. If it exists, build
+with `boot: efi`.
 
 ## Add workers
 

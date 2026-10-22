@@ -1,6 +1,6 @@
 name: Build image
 
-# Builds the Hadron BIOS disk image with build.sh and attaches it to a
+# Builds the Hadron disk image with build.sh and attaches it to a
 # release, so the multi-GB upload happens from the runner.
 on:
   workflow_dispatch:
@@ -10,6 +10,11 @@ on:
         type: choice
         options: [server, worker]
         default: server
+      boot:
+        description: "Firmware boot mode of the target server"
+        type: choice
+        options: [bios, efi]
+        default: bios
       firmware:
         description: "Add the server firmware from hadron-firmware/Dockerfile"
         type: boolean
@@ -78,6 +83,7 @@ jobs:
           HADRON_TAG: ${{ inputs.hadron_tag }}
           FIRMWARE: ${{ inputs.firmware }}
           ROLE: ${{ inputs.role }}
+          BOOT: ${{ inputs.boot }}
           OUT: ${{ runner.temp }}/out
           CLOUD_CONFIG: ${{ runner.temp }}/cc.yaml
         run: ./build.sh
@@ -88,6 +94,7 @@ jobs:
           OUT: ${{ runner.temp }}/out
           FIRMWARE: ${{ inputs.firmware }}
           ROLE: ${{ inputs.role }}
+          BOOT: ${{ inputs.boot }}
           HADRON_TAG: ${{ inputs.hadron_tag }}
           KAIROS_REF: ${{ inputs.kairos_ref }}
           AURORABOOT_REF: ${{ inputs.auroraboot_ref }}
@@ -96,14 +103,14 @@ jobs:
           ksha=$(git -C "$GITHUB_WORKSPACE/src/kairos" rev-parse --short HEAD)
           asha=$(git -C "$GITHUB_WORKSPACE/src/AuroraBoot" rev-parse --short HEAD)
           os="hadron-$HADRON_TAG"; [ "$FIRMWARE" = true ] && os="hadron-fw-$HADRON_TAG"
-          tag="$os-kairos-$ksha-k3s-$ROLE-bios-run$GITHUB_RUN_NUMBER"
+          tag="$os-kairos-$ksha-k3s-$ROLE-$BOOT-run$GITHUB_RUN_NUMBER"
           qcow=$(ls ./*.qcow2)
           {
             echo "Built by [run $GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
             echo
             echo "- OS: \`$os\` (firmware: \`$FIRMWARE\`)"
             echo "- kairos \`$KAIROS_REF\` at \`$ksha\`, AuroraBoot \`$AURORABOOT_REF\` at \`$asha\`, k3s $ROLE (flannel wireguard-native)"
-            echo "- Disk: legacy BIOS, 20 GB"
+            echo "- Disk: $BOOT boot, 20 GB"
             echo "- qcow2 URL: \`$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/${qcow#./}\`"
             echo
             echo '```'
@@ -111,6 +118,6 @@ jobs:
             echo '```'
           } > notes.md
           gh release create "$tag" -R "$GITHUB_REPOSITORY" --latest=false \
-            --title "$os + kairos $ksha + k3s $ROLE (BIOS, run $GITHUB_RUN_NUMBER)" \
+            --title "$os + kairos $ksha + k3s $ROLE ($BOOT, run $GITHUB_RUN_NUMBER)" \
             --notes-file notes.md ./*.qcow2 ./*.raw.xz SHA256SUMS
           echo "### $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
