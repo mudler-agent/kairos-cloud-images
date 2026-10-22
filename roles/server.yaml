@@ -1,8 +1,10 @@
-
 # k3s server. Flannel runs on WireGuard, so pod traffic between nodes is
 # encrypted (UDP 51820 between the nodes). Workers join with the token from
-# /var/lib/rancher/k3s/server/node-token.
+# /var/lib/rancher/k3s/server/node-token. Traefik and the servicelb load
+# balancer are off: MetalLB and an ingress controller come from Flux.
 k3s:
   enabled: true
   args:
     - --flannel-backend=wireguard-native
+    - --disable=traefik
+    - --disable=servicelb

@@ -107,9 +107,24 @@ the URL and the token to each worker at install time:
    again.
 4. On the server, run `sudo k3s kubectl get nodes`.
 
-To turn on WireGuard on a server that runs `vxlan`, put
-`flannel-backend: wireguard-native` in `/etc/rancher/k3s/config.yaml` and
-restart k3s.
+The server image also turns off the k3s Traefik ingress and the servicelb
+load balancer (`--disable=traefik --disable=servicelb`). Install MetalLB and an
+ingress controller yourself.
+
+To make the same changes on a server that is already running, add them to
+`/etc/rancher/k3s/config.yaml` and restart k3s:
+
+```yaml
+flannel-backend: wireguard-native
+disable:
+  - traefik
+  - servicelb
+```
+
+After this change, the Traefik Service can stay in deletion: it keeps the
+`service.kubernetes.io/load-balancer-cleanup` finalizer, and servicelb, which
+removes it, is now off. Remove the finalizer by hand:
+`kubectl -n kube-system patch svc traefik --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]'`.
 
 ## Install on Hetzner Cloud
 
