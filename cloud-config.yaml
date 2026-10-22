@@ -42,10 +42,10 @@ stages:
     # Workers only (roles/worker.yaml). The provider sets up k3s-agent once
     # and then writes /usr/local/.kairos/deployed, so a worker that booted
     # without K3S_URL ignores a join file added later. Clear the marker until
-    # the agent env has a server URL: a join file in /oem plus a reboot is then
-    # enough.
+    # /etc/sysconfig/k3s-agent, where the provider writes the agent env, has a
+    # server URL: a join file in /oem plus a reboot is then enough.
     - name: "Retry the k3s-agent setup until it has a server URL"
-      if: 'grep -q "^k3s-agent:" /oem/90_custom.yaml && ! grep -q "^K3S_URL=" /etc/systemd/system/k3s-agent.service.env 2>/dev/null'
+      if: 'grep -q "^k3s-agent:" /oem/90_custom.yaml && ! grep -q "K3S_URL" /etc/sysconfig/k3s-agent 2>/dev/null'
       commands:
         - rm -f /usr/local/.kairos/deployed
   network:

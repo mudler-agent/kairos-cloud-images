@@ -95,8 +95,9 @@ the URL and the token to each worker at install time:
 3. If the config drive is not available, SSH into the worker, put the same
    YAML in `/oem/95_join.yaml`, and reboot. The provider sets up k3s once and
    then writes `/usr/local/.kairos/deployed`. On a worker whose agent has no
-   server URL yet, a `boot.before` stage removes that marker, so the reboot
-   runs the setup again.
+   server URL yet (no `K3S_URL` in `/etc/sysconfig/k3s-agent`), a
+   `boot.before` stage removes that marker, so the reboot runs the setup
+   again.
 4. On the server, run `sudo k3s kubectl get nodes`.
 
 To turn on WireGuard on a server that runs `vxlan`, put
